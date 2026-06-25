@@ -1,6 +1,7 @@
 from flask import Flask
 from threading import Thread
 
+# Render par bot ko 24/7 online rakhne ke liye Flask Web Server
 app = Flask('')
 
 @app.route('/')
@@ -20,18 +21,20 @@ import sqlite3
 import time
 
 # 1. SETUP CONFIGURATION
-BOT_TOKEN = "8948036037:AAFRIDJMSnse_I98-bGrAM7p0j6IRbErowQ"
+# Aapka naya token yahan set kar diya hai
+BOT_TOKEN = "8948036037:AAErsnmpUGWVHnoTf2KfFMPei9aWwO07_0k"
 ADMIN_ID = 8113992853  # Aapki numeric Telegram ID
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
 REQUIRED_CHANNELS = ["@profitix11", "@profitix00", "@profitix77"]
-PAYMENT_CHANNEL = "@profitix77" # Jis channel me approval request jayegi
+PAYMENT_CHANNEL = "8113992853" # Admin approval ki requests seedha aapke personal inbox mein aayengi
 
 # 2. DATABASE SETUP
 def init_db():
     conn = sqlite3.connect("referral_bot.db")
     cursor = conn.cursor()
+    # Users table: Isme referral count aur balance save hota hai
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -42,6 +45,7 @@ def init_db():
             last_bonus_time INTEGER DEFAULT 0
         )
     """)
+    # Withdrawals table: Isme pending aur approved requests save hoti hain
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS withdrawals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,9 +88,14 @@ def get_main_menu():
     markup.row("🎁 Daily Bonus", "💳 Withdraw")
     return markup
 
-# 4. /START WITH REFERRAL TRACKING
+# 4. /START WITH REFERRAL TRACKING (PRIVATE CHAT ONLY)
 @bot.message_handler(commands=['start'])
 def start_command(message):
+    # SEEEKHNE KE LIYE: Yeh line check karti hai ki chat private hai ya nahi.
+    # Agar message kisi Group/GC se aayega, toh bot yahin se wapas (return) ho jayega.
+    if message.chat.type != 'private':
+        return
+
     user_id = message.from_user.id
     username = message.from_user.username or "Unknown"
     
@@ -102,18 +111,10 @@ def start_command(message):
     cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
     user_exists = cursor.fetchone()
     
+    # Naye user ko database mein save karna aur uska referrer track karna
     if not user_exists:
         cursor.execute("INSERT INTO users (user_id, username, referred_by) VALUES (?, ?, ?)", (user_id, username, referrer_id))
         conn.commit()
-        
-        # Agar naya user link se aaya hai aur direct channels joined hain
-        if referrer_id and is_user_joined(user_id):
-            cursor.execute("UPDATE users SET balance = balance + 1.0, referrals_count = referrals_count + 1 WHERE user_id = ?", (referrer_id,))
-            conn.commit()
-            try:
-                bot.send_message(referrer_id, f"🔔 *Naya Referral!*\nKisi ne aapke link se join kiya hai. Aapko +$1 mile!")
-            except Exception:
-                pass
     conn.close()
 
     if not is_user_joined(user_id):
@@ -122,9 +123,13 @@ def start_command(message):
 
     bot.send_message(message.chat.id, "🎉 Welcome! Aapka account active hai.", reply_markup=get_main_menu())
 
-# 5. BUTTONS AND WORKFLOW LOGIC
+# 5. BUTTONS AND WORKFLOW LOGIC (PRIVATE CHAT ONLY)
 @bot.message_handler(func=lambda message: True)
 def handle_buttons(message):
+    # SEEEKHNE KE LIYE: Is filter ki wajah se group (GC) mein buttons aana bilkul band ho jayenge.
+    if message.chat.type != 'private':
+        return
+
     user_id = message.from_user.id
     
     if not is_user_joined(user_id):
@@ -208,7 +213,7 @@ def process_withdrawal_address(message, balance):
                  
     bot.send_message(PAYMENT_CHANNEL, admin_msg, parse_mode="Markdown", reply_markup=markup)
 
-# 7. CALLBACK QUERY HANDLERS
+# 7. CALLBACK QUERY HANDLERS (REFERRAL & BUTTON VERIFICATION FIXED)
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     user_id = call.from_user.id
@@ -218,13 +223,15 @@ def handle_callbacks(call):
             conn = sqlite3.connect("referral_bot.db")
             cursor = conn.cursor()
             
-            # Check referral tracking logic
+            # Check karte hain ki naye user ko kisne refer kiya tha
             cursor.execute("SELECT referred_by FROM users WHERE user_id = ?", (user_id,))
             user_data = cursor.fetchone()
             
             if user_data and user_data[0] is not None:
                 referrer_id = user_data[0]
+                # Bulane wale ka balance aur count badhate hain
                 cursor.execute("UPDATE users SET balance = balance + 1.0, referrals_count = referrals_count + 1 WHERE user_id = ?", (referrer_id,))
+                # Ek baar reward milne ke baad referred_by ko clear kar dete hain taaki koi dobara click karke reward na le sake
                 cursor.execute("UPDATE users SET referred_by = NULL WHERE user_id = ?", (user_id,))
                 conn.commit()
                 try:
@@ -249,7 +256,7 @@ def handle_callbacks(call):
             
         action, req_id = call.data.split("_")
         conn = sqlite3.connect("referral_bot.db")
-        cursor = conn.cursor()
+        cursor = cursor = conn.cursor()
         
         cursor.execute("SELECT user_id, amount, status FROM withdrawals WHERE id = ?", (req_id,))
         req_data = cursor.fetchone()
@@ -283,4 +290,4 @@ def handle_callbacks(call):
 if __name__ == "__main__":
     keep_alive()
     bot.infinity_polling()
-            
+
