@@ -13,7 +13,7 @@ def run_flask():
 def keep_alive():
     t = Thread(target=run_flask)
     t.start()
-    
+
 import telebot
 from telebot import types
 import sqlite3
@@ -106,6 +106,7 @@ def start_command(message):
         cursor.execute("INSERT INTO users (user_id, username, referred_by) VALUES (?, ?, ?)", (user_id, username, referrer_id))
         conn.commit()
         
+        # Agar naya user link se aaya hai aur direct channels joined hain
         if referrer_id and is_user_joined(user_id):
             cursor.execute("UPDATE users SET balance = balance + 1.0, referrals_count = referrals_count + 1 WHERE user_id = ?", (referrer_id,))
             conn.commit()
@@ -200,7 +201,7 @@ def process_withdrawal_address(message, balance):
     btn_reject = types.InlineKeyboardButton("Reject ❌", callback_data=f"rej_{request_id}")
     markup.add(btn_approve, btn_reject)
     
-    admin_msg = (f"🆔 *New Withdrawal Request (#{request_id})*\n\n"
+    admin_msg = (f"🆔 *New Withdrawal Request (# {request_id})*\n\n"
                  f"👤 User ID: `{user_id}`\n"
                  f"💰 Amount: `${balance}`\n"
                  f"💳 Address: `{address}`")
@@ -211,31 +212,35 @@ def process_withdrawal_address(message, balance):
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     user_id = call.from_user.id
-
-      if call.data == "check_join":
+    
+    if call.data == "check_join":
         if is_user_joined(user_id):
             conn = sqlite3.connect("referral_bot.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT is_verified, referred_by FROM users WHERE user_id = ?", (user_id,))
+            
+            # Check referral tracking logic
+            cursor.execute("SELECT referred_by FROM users WHERE user_id = ?", (user_id,))
             user_data = cursor.fetchone()
             
-            if user_data and user_data[0] == 0:
-                cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
+            if user_data and user_data[0] is not None:
+                referrer_id = user_data[0]
+                cursor.execute("UPDATE users SET balance = balance + 1.0, referrals_count = referrals_count + 1 WHERE user_id = ?", (referrer_id,))
+                cursor.execute("UPDATE users SET referred_by = NULL WHERE user_id = ?", (user_id,))
                 conn.commit()
-                referrer_id = user_data[1]
-                
-                if referrer_id:
-                    cursor.execute("UPDATE users SET balance = balance + 1.0, referrals_count = referrals_count + 1 WHERE user_id = ?", (referrer_id,))
-                    conn.commit()
-                    try:
-                        bot.send_message(referrer_id, f"🔔 *Naya Referral!*\nKisi ne aapke link se join kiya hai. Aapko +$1 mile!")
-                    except Exception: pass
+                try:
+                    bot.send_message(referrer_id, f"🔔 *Naya Referral!*\nKisi ne aapke link se join kiya hai. Aapko +$1 mile!")
+                except Exception:
+                    pass
+
             conn.close()
 
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
-            except Exception: pass
+            except Exception:
+                pass
             bot.send_message(call.message.chat.id, "✅ Verified! Ab aap bot use kar sakte hain.", reply_markup=get_main_menu())
+        else:
+            bot.answer_callback_query(call.id, "❌ Aapne abhi bhi saare channels join nahi kiye hain!", show_alert=True)
             
     elif call.data.startswith("app_") or call.data.startswith("rej_"):
         if user_id != ADMIN_ID:
@@ -276,6 +281,6 @@ def handle_callbacks(call):
         conn.close()
 
 if __name__ == "__main__":
-     keep_alive()
-     bot.infinity_polling()
-    
+    keep_alive()
+    bot.infinity_polling()
+            
