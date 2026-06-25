@@ -25,8 +25,8 @@ ADMIN_ID = 8113992853  # Aapki numeric Telegram ID
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-REQUIRED_CHANNELS = ["@profitix11", "@profitix00", "@profitx77"]
-PAYMENT_CHANNEL = "@profitx77" # Jis channel me approval request jayegi
+REQUIRED_CHANNELS = ["@profitix11", "@profitix00", "@profitix77"]
+PAYMENT_CHANNEL = "@profitix77" # Jis channel me approval request jayegi
 
 # 2. DATABASE SETUP
 def init_db():
