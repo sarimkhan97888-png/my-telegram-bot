@@ -214,7 +214,8 @@ def handle_callbacks(call):
 
       if call.data == "check_join":
         if is_user_joined(user_id):
-            conn = sqlite3.connect("referral_bot.db")
+            conn = 
+ sqlite3.connect("referral_bot.db")
             cursor = conn.cursor()
             cursor.execute("SELECT is_verified, referred_by FROM users WHERE user_id = ?", (user_id,))
             user_data = cursor.fetchone()
