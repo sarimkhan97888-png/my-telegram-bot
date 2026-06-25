@@ -1,3 +1,19 @@
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is Live!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.start()
+    
 import telebot
 from telebot import types
 import sqlite3
@@ -242,5 +258,6 @@ def handle_callbacks(call):
         conn.close()
 
 if __name__ == "__main__":
+   keep_alive()
     bot.infinity_polling()
   
